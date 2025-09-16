@@ -1,0 +1,853 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <title>Evidence piv</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            transition: background-color 0.3s, color 0.3s;
+        }
+        .dark-mode {
+            background-color: #121212;
+            color: #f0f0f0;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            padding: 10px;
+            border: 1px solid #ccc;
+            text-align: center;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        .dark-mode tr:nth-child(even) {
+            background-color: #1e1e1e;
+        }
+        button {
+            padding: 6px 12px;
+            margin: 5px;
+            border: none;
+            border-radius: 5px;
+            background-color: #007bff;
+            color: white;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        input[type="number"], input[type="text"] {
+            padding: 5px;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+        }
+        #control-panel {
+            margin-bottom: 20px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px 16px;
+            align-items: center;
+        }
+        .highlight {
+            background-color: gold;
+            font-weight: bold;
+        }
+        .stats {
+            margin-top: 16px;
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+        .pill {
+            padding: 6px 10px;
+            border-radius: 999px;
+            background: #eef2ff;
+            color: #1e3a8a;
+            font-weight: bold;
+        }
+        .dark-mode .pill {
+            background: #1f2937;
+            color: #bfdbfe;
+        }
+        .columns {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 16px;
+            margin-top: 20px;
+        }
+        .panel {
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            padding: 12px;
+        }
+        .panel h3 {
+            margin-top: 0;
+            margin-bottom: 8px;
+        }
+        ul {
+            list-style: none;
+            padding-left: 0;
+            margin: 0;
+        }
+        li {
+            padding: 6px 8px;
+            border-bottom: 1px dashed #ccc;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.85);
+            color: white;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            padding: 24px;
+            text-align: center;
+        }
+        .overlay .content {
+            max-width: 800px;
+            width: 100%;
+        }
+        .big {
+            font-size: 64px;
+            font-weight: 800;
+            margin: 0 0 24px 0;
+            line-height: 1.1;
+        }
+        .mid {
+            font-size: 28px;
+            margin: 0 0 24px 0;
+        }
+        .overlay .actions {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        .btn-yes { background: #16a34a; }
+        .btn-yes:hover { background: #15803d; }
+        .btn-no { background: #dc2626; }
+        .btn-no:hover { background: #b91c1c; }
+        .badge {
+            background: #e5e7eb;
+            color: #111827;
+            border-radius: 6px;
+            padding: 2px 6px;
+            font-size: 12px;
+        }
+        .dark-mode .badge {
+            background: #374151;
+            color: #e5e7eb;
+        }
+        .muted { color: #6b7280; font-size: 12px; }
+        .dark-mode .muted { color: #9ca3af; }
+        .row-actions {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            justify-content: center;
+        }
+        .btn-mini {
+            padding: 4px 8px;
+            font-size: 12px;
+            border-radius: 4px;
+        }
+        .btn-secondary { background: #6b7280; }
+        .btn-secondary:hover { background: #4b5563; }
+        .btn-danger { background: #ef4444; }
+        .btn-danger:hover { background: #dc2626; }
+    </style>
+</head>
+<body>
+    <h1>Evidence piv</h1>
+    <button onclick="toggleDarkMode()">Přepnout režim</button>
+
+    <div id="control-panel">
+        <input type="text" id="newParticipant" placeholder="Jméno nového účastníka">
+        <button onclick="addParticipant()">Přidat účastníka</button>
+        <button onclick="removeParticipant()">Odebrat posledního</button>
+
+        <label for="maxBeers" style="margin-left:12px;">Maximální počet piv:</label>
+        <input type="number" id="maxBeers" min="0" value="0" style="width:120px;">
+        <span id="stockInfo" class="pill">Sklad: 0</span>
+
+        <button class="btn-secondary" onclick="exportRankingPDF()">Export pořadí do PDF</button>
+        <button class="btn-danger" onclick="clearAllPrompt()">Vyčistit formulář</button>
+    </div>
+
+    <table id="participantsTable">
+        <thead>
+            <tr>
+                <th>🏅</th>
+                <th>Jméno</th>
+                <th>Počet piv</th>
+                <th>Podíl (%)</th>
+                <th>Akce</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td class="medal"></td>
+                <td contenteditable="true">Adam</td>
+                <td>0</td>
+                <td>0%</td>
+                <td>
+                    <input type="number" min="1" value="1" style="width:60px;">
+                    <div class="row-actions">
+                        <button onclick="queueOrder(this)">Odebrat</button>
+                        <button class="btn-secondary" onclick="subtractBeersAdmin(this)">Odečíst (správce)</button>
+                    </div>
+                </td>
+            </tr>
+            <tr>
+                <td class="medal"></td>
+                <td contenteditable="true">Bára</td>
+                <td>0</td>
+                <td>0%</td>
+                <td>
+                    <input type="number" min="1" value="1" style="width:60px;">
+                    <div class="row-actions">
+                        <button onclick="queueOrder(this)">Odebrat</button>
+                        <button class="btn-secondary" onclick="subtractBeersAdmin(this)">Odečíst (správce)</button>
+                    </div>
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <div class="stats">
+        <span class="pill">Vydaných: <strong id="servedCount">0</strong></span>
+        <span class="pill">Čekajících: <strong id="waitingCount">0</strong></span>
+    </div>
+
+    <div class="columns">
+        <div class="panel">
+            <h3>Rezervační fronta</h3>
+            <ul id="queueList"></ul>
+            <div class="muted">Nová objednávka se zobrazí na displeji a čeká na potvrzení.</div>
+        </div>
+        <div class="panel">
+            <h3>Vydaná piva</h3>
+            <ul id="servedList"></ul>
+        </div>
+        <div class="panel">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <h3 style="margin:0;">Čekající objednávky</h3>
+                <button class="btn-yes btn-mini" onclick="serveAllAvailableWaiting()">Vydat dostupné čekající</button>
+            </div>
+            <ul id="waitingList"></ul>
+        </div>
+    </div>
+
+    <canvas id="beerChart" width="400" height="200" style="margin-top:24px;"></canvas>
+
+    <div id="overlay" class="overlay" role="dialog" aria-modal="true">
+        <div class="content">
+            <div class="big" id="overlayTitle"></div>
+            <div class="mid" id="overlaySubtitle"></div>
+            <div class="actions" id="overlayActions">
+                <button class="btn-yes" id="btnYes">Ano, odebráno</button>
+                <button class="btn-no" id="btnNo">Ne, neodebráno</button>
+            </div>
+            <div class="muted">Po potvrzení se objednávka zapíše mezi vydané nebo čekající.</div>
+        </div>
+    </div>
+
+    <script>
+        let darkMode = false;
+
+        // Sklad
+        let maxBeersTotal = 0;
+        let remainingBeers = 0;
+
+        // Fronta objednávek
+        const orderQueue = [];
+
+        // Čekající objednávky (lze dodatečně vydat)
+        const waitingOrders = [];
+
+        // Aktuální objednávka v potvrzovacím overlay
+        let activeOrder = null;
+
+        const ADMIN_CODE = "0000";
+
+        function toggleDarkMode() {
+            darkMode = !darkMode;
+            document.body.classList.toggle("dark-mode", darkMode);
+            saveState();
+        }
+
+        function setStock(newMax) {
+            const alreadyServed = getTotalServedBeers();
+            maxBeersTotal = Math.max(0, newMax);
+            remainingBeers = Math.max(0, maxBeersTotal - alreadyServed);
+            renderStock();
+            saveState();
+        }
+
+        function renderStock() {
+            const stockInfo = document.getElementById("stockInfo");
+            stockInfo.textContent = "Sklad: " + remainingBeers + " / " + maxBeersTotal;
+        }
+
+        document.getElementById("maxBeers").addEventListener("input", (e) => {
+            const val = parseInt(e.target.value);
+            setStock(isNaN(val) ? 0 : val);
+        });
+
+        function addParticipant() {
+            const name = document.getElementById("newParticipant").value.trim();
+            if (!name) return;
+            const table = document.getElementById("participantsTable").getElementsByTagName("tbody")[0];
+            const row = table.insertRow();
+            row.innerHTML = '<td class="medal"></td><td contenteditable="true">' + name + '</td><td>0</td><td>0%</td><td><input type="number" min="1" value="1" style="width:60px;"><div class="row-actions"><button onclick="queueOrder(this)">Odebrat</button><button class="btn-secondary" onclick="subtractBeersAdmin(this)">Odečíst (správce)</button></div></td>';
+            document.getElementById("newParticipant").value = "";
+            updatePercentages();
+            updateMedals();
+            updateChart();
+            saveState();
+        }
+
+        function removeParticipant() {
+            const table = document.getElementById("participantsTable").getElementsByTagName("tbody")[0];
+            if (table.rows.length > 0) {
+                table.deleteRow(-1);
+                updatePercentages();
+                updateMedals();
+                updateChart();
+                saveState();
+            }
+        }
+
+        // Odečtení piv s kódem správce (vrací do skladu)
+        function subtractBeersAdmin(button) {
+            const code = prompt("Zadejte kód správce pro odečtení piv:");
+            if (code !== ADMIN_CODE) return;
+            const row = button.closest("tr");
+            const input = row.querySelector("input[type='number']");
+            const toSubtract = parseInt(input.value);
+            if (isNaN(toSubtract) || toSubtract <= 0) return;
+
+            const countCell = row.cells[2];
+            const current = parseInt(countCell.innerText) || 0;
+            const delta = Math.min(current, toSubtract);
+            if (delta <= 0) return;
+
+            countCell.innerText = String(current - delta);
+
+            // vrátit piva do skladu, ale ne přes maximum
+            const newRemaining = Math.min(maxBeersTotal - getTotalServedBeers(), remainingBeers + delta);
+            remainingBeers = Math.max(0, newRemaining);
+            renderStock();
+
+            // upravit "vydaných" počitadlo, protože je součtové můžeme přepočítat
+            document.getElementById("servedCount").textContent = String(getTotalServedBeers());
+
+            updatePercentages();
+            updateMedals();
+            updateChart();
+            saveState();
+        }
+
+        // Vytvoření objednávky a zobrazení overlay
+        function queueOrder(button) {
+            const row = button.parentElement.parentElement.parentElement;
+            const name = row.cells[1].innerText.trim();
+            const input = row.cells[4].querySelector("input");
+            const count = parseInt(input.value);
+            if (!name || isNaN(count) || count <= 0) return;
+
+            const order = {
+                id: Date.now() + "-" + Math.random().toString(36).slice(2),
+                name,
+                count,
+                createdAt: new Date(),
+                rowRef: row
+            };
+            orderQueue.push(order);
+            renderQueue();
+            maybeShowNextOrder();
+        }
+
+        function renderQueue() {
+            const list = document.getElementById("queueList");
+            list.innerHTML = "";
+            orderQueue.forEach(o => {
+                const li = document.createElement("li");
+                const left = document.createElement("span");
+                left.textContent = o.name + " — " + o.count + "× pivo";
+                const right = document.createElement("span");
+                right.className = "badge";
+                right.textContent = timeHHMM(o.createdAt);
+                li.appendChild(left);
+                li.appendChild(right);
+                list.appendChild(li);
+            });
+        }
+
+        function timeHHMM(d) {
+            const dt = (d instanceof Date) ? d : new Date(d);
+            return dt.toLocaleTimeString("cs-CZ", { hour: "2-digit", minute: "2-digit" });
+        }
+
+        function maybeShowNextOrder() {
+            if (activeOrder) return;
+            if (orderQueue.length === 0) return;
+            activeOrder = orderQueue.shift();
+            renderQueue();
+            showOverlayForOrder(activeOrder);
+        }
+
+        function showOverlayForOrder(order) {
+            const overlay = document.getElementById("overlay");
+            const title = document.getElementById("overlayTitle");
+            const subtitle = document.getElementById("overlaySubtitle");
+            title.textContent = order.name;
+            subtitle.textContent = "Požadavek: " + order.count + "× pivo";
+            overlay.style.display = "flex";
+        }
+
+        function hideOverlay() {
+            const overlay = document.getElementById("overlay");
+            overlay.style.display = "none";
+        }
+
+        document.getElementById("btnYes").addEventListener("click", () => {
+            if (!activeOrder) return;
+            const order = activeOrder;
+
+            if (order.count > remainingBeers) {
+                addWaiting(order, "Nedostatek na skladě");
+                activeOrder = null;
+                hideOverlay();
+                maybeShowNextOrder();
+                return;
+            }
+
+            applyServe(order);
+            addServed(order);
+            activeOrder = null;
+            hideOverlay();
+            maybeShowNextOrder();
+        });
+
+        document.getElementById("btnNo").addEventListener("click", () => {
+            if (!activeOrder) return;
+            addWaiting(activeOrder, "Odmítnuto");
+            activeOrder = null;
+            hideOverlay();
+            maybeShowNextOrder();
+        });
+
+        function applyServe(order) {
+            const row = order.rowRef;
+            const countCell = row ? row.cells[2] : null;
+            if (countCell) {
+                countCell.innerText = (parseInt(countCell.innerText) || 0) + order.count;
+            }
+
+            remainingBeers = Math.max(0, remainingBeers - order.count);
+            renderStock();
+
+            updatePercentages();
+            updateMedals();
+            updateChart();
+            saveState();
+        }
+
+        function addServed(order) {
+            const servedList = document.getElementById("servedList");
+            const li = document.createElement("li");
+            const left = document.createElement("span");
+            left.textContent = order.name + " — " + order.count + "× pivo";
+            const right = document.createElement("span");
+            right.className = "badge";
+            right.textContent = timeHHMM(new Date());
+            li.appendChild(left);
+            li.appendChild(right);
+            servedList.prepend(li);
+
+            document.getElementById("servedCount").textContent = String(getTotalServedBeers());
+            saveState();
+        }
+
+        // Čekající (lze dodatečně vydat)
+        function addWaiting(order, reason) {
+            const waitingOrder = {
+                id: order.id || (Date.now() + "-" + Math.random().toString(36).slice(2)),
+                name: order.name,
+                count: order.count,
+                createdAt: new Date(),
+                rowRef: order.rowRef,
+                reason: reason || "Čeká"
+            };
+            waitingOrders.unshift(waitingOrder);
+
+            const waitingCount = document.getElementById("waitingCount");
+            waitingCount.textContent = (parseInt(waitingCount.textContent) || 0) + waitingOrder.count;
+
+            renderWaitingList();
+            saveState();
+        }
+
+        function renderWaitingList() {
+            const waitingList = document.getElementById("waitingList");
+            waitingList.innerHTML = "";
+            waitingOrders.forEach(o => {
+                const li = document.createElement("li");
+
+                const leftWrap = document.createElement("div");
+                leftWrap.style.display = "flex";
+                leftWrap.style.flexDirection = "column";
+                leftWrap.style.gap = "2px";
+
+                const line1 = document.createElement("span");
+                line1.textContent = o.name + " — " + o.count + "× pivo";
+                const line2 = document.createElement("span");
+                line2.className = "muted";
+                line2.textContent = (o.reason || "Čeká") + " • " + timeHHMM(o.createdAt);
+                leftWrap.appendChild(line1);
+                leftWrap.appendChild(line2);
+
+                const actions = document.createElement("div");
+                actions.className = "row-actions";
+                const btnServe = document.createElement("button");
+                btnServe.className = "btn-mini btn-yes";
+                btnServe.textContent = "Vydat";
+                btnServe.onclick = () => serveWaiting(o.id);
+
+                actions.appendChild(btnServe);
+
+                li.appendChild(leftWrap);
+                li.appendChild(actions);
+                waitingList.appendChild(li);
+            });
+        }
+
+        function serveWaiting(orderId) {
+            const idx = waitingOrders.findIndex(o => o.id === orderId);
+            if (idx === -1) return;
+            const order = waitingOrders[idx];
+            if (order.count > remainingBeers) {
+                alert("Nedostatečný sklad pro vydání této objednávky.");
+                return;
+            }
+
+            applyServe(order);
+            addServed(order);
+
+            waitingOrders.splice(idx, 1);
+            const waitingCount = document.getElementById("waitingCount");
+            waitingCount.textContent = Math.max(0, (parseInt(waitingCount.textContent) || 0) - order.count);
+            renderWaitingList();
+            saveState();
+        }
+
+        // Hromadné vydání všech čekajících, na které stačí sklad
+        function serveAllAvailableWaiting() {
+            if (waitingOrders.length === 0) return;
+
+            const inOrder = [...waitingOrders].reverse();
+            let servedTotalFromWaiting = 0;
+
+            for (const o of inOrder) {
+                if (o.count <= remainingBeers) {
+                    const idx = waitingOrders.findIndex(w => w.id === o.id);
+                    if (idx !== -1) {
+                        applyServe(o);
+                        addServed(o);
+                        waitingOrders.splice(idx, 1);
+                        servedTotalFromWaiting += o.count;
+                    }
+                }
+                if (remainingBeers === 0) break;
+            }
+
+            if (servedTotalFromWaiting > 0) {
+                const waitingCount = document.getElementById("waitingCount");
+                waitingCount.textContent = Math.max(0, (parseInt(waitingCount.textContent) || 0) - servedTotalFromWaiting);
+                renderWaitingList();
+                saveState();
+            }
+        }
+
+        function getTotalServedBeers() {
+            const rows = document.querySelectorAll("#participantsTable tbody tr");
+            let total = 0;
+            rows.forEach(row => {
+                total += parseInt(row.cells[2].innerText) || 0;
+            });
+            return total;
+        }
+
+        function updatePercentages() {
+            const rows = document.querySelectorAll("#participantsTable tbody tr");
+            let total = 0;
+            rows.forEach(row => {
+                total += parseInt(row.cells[2].innerText) || 0;
+            });
+            rows.forEach(row => {
+                const count = parseInt(row.cells[2].innerText) || 0;
+                const percent = total > 0 ? ((count / total) * 100).toFixed(1) : 0;
+                row.cells[3].innerText = percent + "%";
+            });
+        }
+
+        // Řazení dle počtu piv a pořadí: 🏅🥈🥉, ostatní 4., 5., ...
+        function updateMedals() {
+            const rows = Array.from(document.querySelectorAll("#participantsTable tbody tr"));
+            rows.sort((a, b) => (parseInt(b.cells[2].innerText) || 0) - (parseInt(a.cells[2].innerText) || 0)).reverse();
+
+            rows.forEach((row, index) => {
+                const medalCell = row.cells[0];
+                row.classList.remove("highlight");
+
+                if (index === 0) {
+                    medalCell.innerText = "🏅";
+                    row.classList.add("highlight");
+                } else if (index === 1) {
+                    medalCell.innerText = "🥈";
+                } else if (index === 2) {
+                    medalCell.innerText = "🥉";
+                } else {
+                    medalCell.innerText = (index + 1) + ".";
+                }
+            });
+
+            const tbody = document.querySelector("#participantsTable tbody");
+            rows.forEach(row => tbody.appendChild(row));
+        }
+
+        function updateChart() {
+            const names = [];
+            const counts = [];
+            const rows = document.querySelectorAll("#participantsTable tbody tr");
+            rows.forEach(row => {
+                names.push(row.cells[1].innerText);
+                counts.push(parseInt(row.cells[2].innerText) || 0);
+            });
+            beerChart.data.labels = names;
+            beerChart.data.datasets[0].data = counts;
+            beerChart.update();
+        }
+
+        // Uložení/obnovení stavu
+        const STORAGE_KEY = "evidence_piv_state_v2";
+        function saveState() {
+            try {
+                const participants = [];
+                const rows = document.querySelectorAll("#participantsTable tbody tr");
+                rows.forEach(row => {
+                    participants.push({
+                        name: row.cells[1].innerText.trim(),
+                        count: parseInt(row.cells[2].innerText) || 0
+                    });
+                });
+
+                const state = {
+                    darkMode,
+                    maxBeersTotal,
+                    remainingBeers,
+                    participants,
+                    waitingOrders: waitingOrders.map(o => ({
+                        id: o.id,
+                        name: o.name,
+                        count: o.count,
+                        createdAt: o.createdAt instanceof Date ? o.createdAt.toISOString() : o.createdAt,
+                        reason: o.reason
+                    })),
+                    servedList: Array.from(document.querySelectorAll("#servedList li")).map(li => li.textContent),
+                    servedCount: parseInt(document.getElementById("servedCount").textContent) || 0,
+                    waitingCount: parseInt(document.getElementById("waitingCount").textContent) || 0
+                };
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+            } catch (e) {
+                console.warn("Nelze uložit stav:", e);
+            }
+        }
+
+        function loadState() {
+            try {
+                const raw = localStorage.getItem(STORAGE_KEY);
+                if (!raw) return;
+
+                const state = JSON.parse(raw);
+
+                darkMode = !!state.darkMode;
+                document.body.classList.toggle("dark-mode", darkMode);
+
+                const tbody = document.querySelector("#participantsTable tbody");
+                tbody.innerHTML = "";
+                (state.participants || []).forEach(p => {
+                    const row = tbody.insertRow();
+                    row.innerHTML = '<td class="medal"></td><td contenteditable="true"></td><td>0</td><td>0%</td><td><input type="number" min="1" value="1" style="width:60px;"><div class="row-actions"><button onclick="queueOrder(this)">Odebrat</button><button class="btn-secondary" onclick="subtractBeersAdmin(this)">Odečíst (správce)</button></div></td>';
+                    row.cells[1].innerText = p.name || "";
+                    row.cells[2].innerText = String(p.count || 0);
+                });
+
+                maxBeersTotal = parseInt(state.maxBeersTotal) || 0;
+                const computedRemaining = Math.max(0, maxBeersTotal - getTotalServedBeers());
+                remainingBeers = typeof state.remainingBeers === "number" ? Math.min(state.remainingBeers, computedRemaining) : computedRemaining;
+                document.getElementById("maxBeers").value = String(maxBeersTotal);
+                renderStock();
+
+                waitingOrders.length = 0;
+                (state.waitingOrders || []).forEach(o => {
+                    waitingOrders.push({
+                        id: o.id,
+                        name: o.name,
+                        count: o.count,
+                        createdAt: o.createdAt ? new Date(o.createdAt) : new Date(),
+                        rowRef: findRowByName(o.name),
+                        reason: o.reason || "Čeká"
+                    });
+                });
+                renderWaitingList();
+
+                const servedList = document.getElementById("servedList");
+                servedList.innerHTML = "";
+                (state.servedList || []).forEach(text => {
+                    const li = document.createElement("li");
+                    li.textContent = text;
+                    servedList.appendChild(li);
+                });
+
+                document.getElementById("servedCount").textContent = String(state.servedCount || getTotalServedBeers());
+                document.getElementById("waitingCount").textContent = String(state.waitingCount || waitingOrders.reduce((a,b)=>a+b.count,0));
+
+                updatePercentages();
+                updateMedals();
+                updateChart();
+            } catch (e) {
+                console.warn("Nelze načíst stav:", e);
+            }
+        }
+
+        function findRowByName(name) {
+            const rows = document.querySelectorAll("#participantsTable tbody tr");
+            for (const row of rows) {
+                if (row.cells[1].innerText.trim() === name) return row;
+            }
+            return null;
+        }
+
+        function clearAllPrompt() {
+            const code = prompt("Zadejte kód správce pro vyčištění formuláře:");
+            if (code !== ADMIN_CODE) return;
+            clearAll();
+        }
+
+        function clearAll() {
+            // tabulka
+            const tbody = document.querySelector("#participantsTable tbody");
+            tbody.innerHTML = "";
+
+            // čekající
+            waitingOrders.length = 0;
+            document.getElementById("waitingList").innerHTML = "";
+            document.getElementById("waitingCount").textContent = "0";
+
+            // vydané
+            document.getElementById("servedList").innerHTML = "";
+            document.getElementById("servedCount").textContent = "0";
+
+            // sklad
+            maxBeersTotal = 0;
+            remainingBeers = 0;
+            document.getElementById("maxBeers").value = "0";
+            renderStock();
+
+            // graf a pořadí
+            updatePercentages();
+            updateMedals();
+            updateChart();
+
+            // storage
+            localStorage.removeItem(STORAGE_KEY);
+        }
+
+        // Export pořadí do PDF
+        async function exportRankingPDF() {
+            const rows = Array.from(document.querySelectorAll("#participantsTable tbody tr"));
+            const ranking = rows.map((row, index) => {
+                const name = row.cells[1].innerText.trim();
+                const count = parseInt(row.cells[2].innerText) || 0;
+                const share = row.cells[3].innerText.trim();
+                let orderLabel = "";
+                if (index === 0) orderLabel = "🏅";
+                else if (index === 1) orderLabel = "🥈";
+                else if (index === 2) orderLabel = "🥉";
+                else orderLabel = (index + 1) + ".";
+                return { order: orderLabel, name, count, share };
+            });
+
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "a4" });
+
+            doc.setFont("helvetica", "bold");
+            doc.setFontSize(18);
+            doc.text("Evidence piv — Pořadí", 40, 40);
+
+            doc.setFontSize(12);
+            doc.setFont("helvetica", "normal");
+            doc.text("Datum: " + new Date().toLocaleString("cs-CZ"), 40, 60);
+            doc.text("Sklad: " + remainingBeers + " / " + maxBeersTotal, 40, 76);
+
+            const body = ranking.map(r => [r.order, r.name, String(r.count), r.share]);
+            doc.autoTable({
+                head: [["Pořadí", "Jméno", "Počet piv", "Podíl"]],
+                body,
+                startY: 100,
+                styles: { font: "helvetica", fontSize: 11 },
+                headStyles: { fillColor: [0, 123, 255] }
+            });
+
+            doc.save("poradi_piva.pdf");
+        }
+
+        const ctx = document.getElementById("beerChart").getContext("2d");
+        const beerChart = new Chart(ctx, {
+            type: "bar",
+            data: {
+                labels: [],
+                datasets: [{
+                    label: "Počet piv",
+                    data: [],
+                    backgroundColor: "rgba(255, 99, 132, 0.5)",
+                    borderColor: "rgba(255, 99, 132, 1)",
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        precision: 0
+                    }
+                }
+            }
+        });
+
+        // Inicializace
+        loadState();
+        updateChart();
+
+        window.addEventListener("beforeunload", saveState);
+    </script>
+</body>
+</html>
